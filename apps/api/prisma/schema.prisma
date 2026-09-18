@@ -4,8 +4,13 @@ datasource db { provider = "postgresql" url = env("DATABASE_URL") }
 enum Role { USER MODERATOR AGENT ADMIN SUPER_ADMIN }
 enum Asset { TSX USDT }
 enum ListingStatus { OPEN FILLED CANCELLED }
-enum LedgerType { BONUS MISSION MARKET_BUY MARKET_SELL MARKET_FEE BUILD SPEND REWARD }
+enum LedgerType { BONUS MISSION MARKET_BUY MARKET_SELL MARKET_FEE BUILD SPEND REWARD DEPOSIT WITHDRAW }
 enum FleetStatus { IDLE TRAVELING BATTLE RETURNING }
+enum MissionStatus { ACTIVE COMPLETED }
+enum ResearchType { COMBAT PROPULSION ECONOMY EXPLORATION }
+enum ShipType { MINER FIGHTER CRUISER TRANSPORT EXPLORER }
+enum NotificationType { SYSTEM MARKET BATTLE MISSION ALLIANCE }
+enum BlockchainProvider { SIMULATED EVM }
 
 model User {
   id Int @id @default(autoincrement())
@@ -13,20 +18,29 @@ model User {
   passwordHash String
   role Role @default(USER)
   createdAt DateTime @default(now())
-  planet Planet?
+  planets Planet[]
   wallet Wallet?
   ledger Ledger[]
   listings Listing[]
   missions UserMission[]
   fleets Fleet[]
-  battleReports BattleReport[] @relation("attacker")
+  battleReportsAttacker BattleReport[] @relation("attacker")
+  battleReportsDefender BattleReport[] @relation("defender")
   allianceMember AllianceMember?
+  research Research[]
+  ships Ship[]
+  notifications Notification[]
+  auditLogs AuditLog[]
 }
+
 model Planet {
   id Int @id @default(autoincrement())
-  userId Int @unique
+  userId Int
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   name String
+  galaxy Int @default(1)
+  system Int @default(1)
+  position Int @default(1)
   metal Float @default(1000)
   crystal Float @default(500)
   deuterium Float @default(100)
@@ -36,7 +50,12 @@ model Planet {
   deutSynth Int @default(1)
   powerPlant Int @default(1)
   lastTick DateTime @default(now())
+  fleets Fleet[]
+  researches Research[]
+  @@unique([galaxy,system,position])
+  @@index([userId])
 }
+
 model Wallet {
   id Int @id @default(autoincrement())
   userId Int @unique
@@ -46,6 +65,7 @@ model Wallet {
   lockedTsx Float @default(0)
   lockedUsdt Float @default(0)
 }
+
 model Ledger {
   id Int @id @default(autoincrement())
   userId Int
@@ -55,17 +75,22 @@ model Ledger {
   type LedgerType
   reference String?
   createdAt DateTime @default(now())
+  @@index([userId,createdAt])
 }
+
 model Listing {
   id Int @id @default(autoincrement())
   sellerId Int
   seller User @relation(fields:[sellerId],references:[id],onDelete:Cascade)
-  asset Asset
+  asset Asset @default(TSX)
   quantity Float
   price Float
   status ListingStatus @default(OPEN)
   createdAt DateTime @default(now())
+  filledAt DateTime?
+  @@index([status,createdAt])
 }
+
 model Mission {
   id Int @id @default(autoincrement())
   code String @unique
@@ -75,44 +100,130 @@ model Mission {
   rewardMetal Float @default(0)
   users UserMission[]
 }
+
 model UserMission {
   userId Int
   missionId Int
   completedAt DateTime?
+  status MissionStatus @default(ACTIVE)
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   mission Mission @relation(fields:[missionId],references:[id],onDelete:Cascade)
   @@id([userId,missionId])
 }
+
+model Research {
+  id Int @id @default(autoincrement())
+  userId Int
+  planetId Int
+  type ResearchType
+  level Int @default(1)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  planet Planet @relation(fields:[planetId],references:[id],onDelete:Cascade)
+  @@unique([userId,type])
+}
+
+model Ship {
+  id Int @id @default(autoincrement())
+  userId Int
+  type ShipType
+  quantity Int @default(0)
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@unique([userId,type])
+}
+
 model Fleet {
   id Int @id @default(autoincrement())
   userId Int
-  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  planetId Int
   name String
-  ships Int @default(1)
+  ships Json
   attack Int @default(10)
   defense Int @default(10)
+  speed Int @default(100)
   status FleetStatus @default(IDLE)
+  destinationPlanetId Int?
+  departureAt DateTime?
+  arrivalAt DateTime?
   createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  planet Planet @relation(fields:[planetId],references:[id],onDelete:Cascade)
+  @@index([userId,status])
 }
+
 model BattleReport {
   id Int @id @default(autoincrement())
   attackerId Int
-  attacker User @relation("attacker",fields:[attackerId],references:[id],onDelete:Cascade)
   defenderId Int
   winnerId Int
   attackerPower Int
   defenderPower Int
+  attackerLosses Json
+  defenderLosses Json
   createdAt DateTime @default(now())
+  attacker User @relation("attacker",fields:[attackerId],references:[id],onDelete:Cascade)
+  defender User @relation("defender",fields:[defenderId],references:[id],onDelete:Cascade)
 }
+
 model Alliance {
   id Int @id @default(autoincrement())
   name String @unique
   tag String @unique
+  createdAt DateTime @default(now())
   members AllianceMember[]
 }
+
 model AllianceMember {
   userId Int @unique
   allianceId Int
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   alliance Alliance @relation(fields:[allianceId],references:[id],onDelete:Cascade)
+  joinedAt DateTime @default(now())
+}
+
+model Notification {
+  id Int @id @default(autoincrement())
+  userId Int
+  type NotificationType
+  title String
+  message String
+  read Boolean @default(false)
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([userId,read,createdAt])
+}
+
+model AuditLog {
+  id Int @id @default(autoincrement())
+  userId Int?
+  action String
+  entity String
+  entityId String?
+  ip String?
+  metadata Json?
+  createdAt DateTime @default(now())
+  user User? @relation(fields:[userId],references:[id],onDelete:SetNull)
+  @@index([createdAt])
+}
+
+model IdempotencyKey {
+  id Int @id @default(autoincrement())
+  userId Int
+  key String
+  response Json
+  createdAt DateTime @default(now())
+  @@unique([userId,key])
+}
+
+model ChainTransaction {
+  id Int @id @default(autoincrement())
+  userId Int
+  provider BlockchainProvider
+  asset Asset
+  direction String
+  txHash String @unique
+  amount Float
+  status String @default("CONFIRMED")
+  createdAt DateTime @default(now())
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  @@index([userId,createdAt])
 }
