@@ -31,6 +31,7 @@ model User {
   ships Ship[]
   notifications Notification[]
   auditLogs AuditLog[]
+  chainTransactions ChainTransaction[]
 }
 
 model Planet {

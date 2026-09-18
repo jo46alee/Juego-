@@ -66,9 +66,12 @@ app.post("/auth/register",async(req,res)=>{
  try{
   const hash=await bcrypt.hash(password,12);
   const result=await prisma.$transaction(async tx=>{
-   const u=await tx.user.create({data:{username,passwordHash:hash,planet:{create:{name:username+"'s World",galaxy:1,system:1,position:await freePosition(tx)}},wallet:{create:{tsx:1000}}},select:{id:true,username:true,role:true}});
+   const position=await freePosition(tx);
+   const u=await tx.user.create({data:{username,passwordHash:hash},select:{id:true,username:true,role:true}});
+   const p=await tx.planet.create({data:{userId:u.id,name:username+"'s World",galaxy:1,system:1,position}});
+   await tx.wallet.create({data:{userId:u.id,tsx:1000}});
    await tx.ledger.create({data:{userId:u.id,asset:Asset.TSX,amount:1000,type:LedgerType.BONUS,reference:"welcome"}});
-   for(const type of Object.values(ResearchType)) await tx.research.create({data:{userId:u.id,planetId:1,type,level:1}}).catch(()=>{});
+   for(const type of Object.values(ResearchType)) await tx.research.create({data:{userId:u.id,planetId:p.id,type,level:1}});
    return u;
   });
   res.json({token:sign(result as Token),user:result});
