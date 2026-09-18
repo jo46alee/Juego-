@@ -1,9 +1,1 @@
-{
-  "name":"trendshopx-gamefi",
-  "version":"1.0.0",
-  "private":true,
-  "description":"TrendShopX GameFi V1",
-  "type":"module",
-  "scripts":{"start":"node server.js","dev":"node --watch server.js"},
-  "dependencies":{"better-sqlite3":"^11.7.0","bcryptjs":"^2.4.3","dotenv":"^16.4.7","express":"^4.21.2","jsonwebtoken":"^9.0.2"}
-}
+{"name":"trendshopx-gamefi","private":true,"version":"1.0.0","workspaces":["apps/api","apps/web"],"scripts":{"dev":"concurrently \"npm run dev -w apps/api\" \"npm run dev -w apps/web\"","build":"npm run build -w apps/web","start":"npm run start -w apps/api","db:push":"npm run db:push -w apps/api"},"devDependencies":{"concurrently":"^9.1.2"}}

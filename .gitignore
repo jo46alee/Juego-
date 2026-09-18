@@ -1,5 +1,5 @@
 node_modules/
 .env
-data/
-*.db
-npm-debug.log*
+apps/api/.env
+apps/api/prisma/*.db
+dist/

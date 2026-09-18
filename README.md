@@ -1,36 +1,22 @@
-# TrendShopX GameFi — V1
+# TrendShopX GameFi
 
-Juego espacial web full-stack, propietario y preparado para evolucionar a GameFi/Web3.
+V1 full-stack space strategy/GameFi foundation. Original implementation; it does not copy Xnova/OGame source code or assets.
 
-## Incluye
-- Registro e inicio de sesión con JWT.
-- Planeta inicial y producción automática de Metal, Cristal y Deuterio.
-- Edificios: Mina de Metal, Mina de Cristal, Sintetizador de Deuterio y Planta de Energía.
-- Mejoras con costes crecientes.
-- Misiones con recompensas.
-- Marketplace P2P interno con comisión configurable del 3%.
-- Wallet interna con TSX y USDT en modo simulado.
-- Libro mayor de movimientos.
-- Ranking de jugadores.
-- Panel administrativo básico.
-- Docker y SQLite para arrancar sin servicios externos.
-- Arquitectura preparada para reemplazar el modo simulado por blockchain real.
+## Stack
+React + TypeScript + Vite / Express + TypeScript / Prisma + PostgreSQL / WebSocket-ready API / Docker.
 
-## Ejecutar localmente
-```bash
-cp .env.example .env
-npm install
-npm run dev
-```
-Abrir http://localhost:3000
+## Modules
+Auth, planet economy, buildings, missions, fleets, battles, alliances-ready schema, P2P market, internal TSX/USDT wallet, ledger, rankings, admin stats.
 
-## Docker
-```bash
-docker compose up --build
-```
+## Quick start
+1. cp .env.example .env
+2. docker compose up -d postgres
+3. npm install
+4. npm run db:push
+5. npm run dev
 
-## Seguridad
-No almacena seed phrases ni claves privadas. Los depósitos/retiros blockchain reales no están activados en V1; existe una capa de servicio para integrar un proveedor después.
+Web: http://localhost:5173
+API: http://localhost:4000/health
 
-## Roadmap
-V1 juego/economía -> V2 flotas/combate/alianzas -> V3 Web3 real -> V4 contratos y economía avanzada.
+## Web3
+The V1 wallet is custodial-free at the application level: no seed phrases/private keys are stored. Blockchain deposits/withdrawals must be implemented behind a provider adapter and verified on-chain before enabling production value transfers.

@@ -1,13 +1,26 @@
 services:
-  gamefi:
-    build: .
-    container_name: trendshopx-gamefi
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    env_file:
-      - .env
-    volumes:
-      - gamefi_data:/app/data
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: gamefi
+      POSTGRES_PASSWORD: gamefi
+      POSTGRES_DB: gamefi
+    ports: ["5432:5432"]
+    volumes: [gamefi_pg:/var/lib/postgresql/data]
+  api:
+    build: ./apps/api
+    environment:
+      DATABASE_URL: postgresql://gamefi:gamefi@postgres:5432/gamefi
+      JWT_SECRET: change-me-in-production
+      API_PORT: 4000
+      WEB_ORIGIN: http://localhost:5173
+    depends_on: [postgres]
+    ports: ["4000:4000"]
+  web:
+    build: ./apps/web
+    environment:
+      VITE_API_URL: http://localhost:4000
+    depends_on: [api]
+    ports: ["5173:5173"]
 volumes:
-  gamefi_data:
+  gamefi_pg:

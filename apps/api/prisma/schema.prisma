@@ -1,0 +1,118 @@
+generator client { provider = "prisma-client-js" }
+datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+
+enum Role { USER MODERATOR AGENT ADMIN SUPER_ADMIN }
+enum Asset { TSX USDT }
+enum ListingStatus { OPEN FILLED CANCELLED }
+enum LedgerType { BONUS MISSION MARKET_BUY MARKET_SELL MARKET_FEE BUILD SPEND REWARD }
+enum FleetStatus { IDLE TRAVELING BATTLE RETURNING }
+
+model User {
+  id Int @id @default(autoincrement())
+  username String @unique
+  passwordHash String
+  role Role @default(USER)
+  createdAt DateTime @default(now())
+  planet Planet?
+  wallet Wallet?
+  ledger Ledger[]
+  listings Listing[]
+  missions UserMission[]
+  fleets Fleet[]
+  battleReports BattleReport[] @relation("attacker")
+  allianceMember AllianceMember?
+}
+model Planet {
+  id Int @id @default(autoincrement())
+  userId Int @unique
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  name String
+  metal Float @default(1000)
+  crystal Float @default(500)
+  deuterium Float @default(100)
+  energy Float @default(100)
+  metalMine Int @default(1)
+  crystalMine Int @default(1)
+  deutSynth Int @default(1)
+  powerPlant Int @default(1)
+  lastTick DateTime @default(now())
+}
+model Wallet {
+  id Int @id @default(autoincrement())
+  userId Int @unique
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  tsx Float @default(1000)
+  usdt Float @default(0)
+  lockedTsx Float @default(0)
+  lockedUsdt Float @default(0)
+}
+model Ledger {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  asset Asset
+  amount Float
+  type LedgerType
+  reference String?
+  createdAt DateTime @default(now())
+}
+model Listing {
+  id Int @id @default(autoincrement())
+  sellerId Int
+  seller User @relation(fields:[sellerId],references:[id],onDelete:Cascade)
+  asset Asset
+  quantity Float
+  price Float
+  status ListingStatus @default(OPEN)
+  createdAt DateTime @default(now())
+}
+model Mission {
+  id Int @id @default(autoincrement())
+  code String @unique
+  title String
+  description String
+  rewardTsx Float @default(0)
+  rewardMetal Float @default(0)
+  users UserMission[]
+}
+model UserMission {
+  userId Int
+  missionId Int
+  completedAt DateTime?
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  mission Mission @relation(fields:[missionId],references:[id],onDelete:Cascade)
+  @@id([userId,missionId])
+}
+model Fleet {
+  id Int @id @default(autoincrement())
+  userId Int
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  name String
+  ships Int @default(1)
+  attack Int @default(10)
+  defense Int @default(10)
+  status FleetStatus @default(IDLE)
+  createdAt DateTime @default(now())
+}
+model BattleReport {
+  id Int @id @default(autoincrement())
+  attackerId Int
+  attacker User @relation("attacker",fields:[attackerId],references:[id],onDelete:Cascade)
+  defenderId Int
+  winnerId Int
+  attackerPower Int
+  defenderPower Int
+  createdAt DateTime @default(now())
+}
+model Alliance {
+  id Int @id @default(autoincrement())
+  name String @unique
+  tag String @unique
+  members AllianceMember[]
+}
+model AllianceMember {
+  userId Int @unique
+  allianceId Int
+  user User @relation(fields:[userId],references:[id],onDelete:Cascade)
+  alliance Alliance @relation(fields:[allianceId],references:[id],onDelete:Cascade)
+}
