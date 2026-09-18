@@ -1,15 +1,14 @@
 generator client { provider = "prisma-client-js" }
 datasource db { provider = "postgresql" url = env("DATABASE_URL") }
-
 enum Role { USER MODERATOR AGENT ADMIN SUPER_ADMIN }
 enum Asset { TSX USDT }
-enum LedgerType { BONUS MISSION MARKET_BUY MARKET_SELL MARKET_FEE BUILD SPEND REWARD DEPOSIT WITHDRAW COMBAT }
+enum LedgerType { BONUS MISSION MARKET_BUY MARKET_SELL MARKET_FEE BUILD SPEND REWARD DEPOSIT WITHDRAW COMBAT TRADE EVENT }
 enum FleetStatus { IDLE TRAVELING BATTLE RETURNING }
 enum FleetMission { TRANSPORT ATTACK EXPEDITION COLONIZE }
 enum ResearchType { COMBAT PROPULSION ECONOMY EXPLORATION ESPIONAGE }
 enum ShipType { MINER FIGHTER CRUISER TRANSPORT EXPLORER COLONY }
 enum DefenseType { CANNON LASER PLASMA SHIELD }
-enum NotificationType { SYSTEM MARKET BATTLE MISSION ALLIANCE FLEET }
+enum NotificationType { SYSTEM MARKET BATTLE MISSION ALLIANCE FLEET TRADE EVENT }
 enum BlockchainProvider { SIMULATED_EVM }
 enum JobType { BUILDING RESEARCH SHIP DEFENSE }
 enum JobStatus { QUEUED DONE CANCELLED }
@@ -17,65 +16,22 @@ enum OrderSide { BUY SELL }
 enum OrderStatus { OPEN PARTIAL FILLED CANCELLED }
 enum SeasonStatus { UPCOMING ACTIVE ENDED }
 enum EspionageStatus { RUNNING COMPLETED FAILED }
-
+enum DiplomacyStatus { PROPOSED ACTIVE ENDED }
 model User {
- id Int @id @default(autoincrement())
- username String @unique
- passwordHash String
- role Role @default(USER)
- referralCode String @unique @default(cuid())
- referredById Int?
- createdAt DateTime @default(now())
- planets Planet[]
- wallet Wallet?
- ledger Ledger[]
- fleets Fleet[]
- research Research[]
- ships Ship[]
- notifications Notification[]
- auditLogs AuditLog[]
- chainTransactions ChainTransaction[]
- buildJobs BuildJob[]
- expeditions Expedition[]
- chatMessages ChatMessage[] @relation("chatAuthor")
- referralsSent Referral[] @relation("referrer")
- referralsReceived Referral[] @relation("referred")
- seasonScores SeasonScore[]
- marketOrders MarketOrder[]
- spyReports SpyReport[] @relation("spySender")
- spyReportsReceived SpyReport[] @relation("spyTarget")
- alliances AllianceMember[]
+ id Int @id @default(autoincrement()); username String @unique; passwordHash String; role Role @default(USER)
+ referralCode String @unique @default(cuid()); referredById Int?; xp Int @default(0); level Int @default(1); createdAt DateTime @default(now())
+ planets Planet[]; wallet Wallet?; ledger Ledger[]; fleets Fleet[]; research Research[]; ships Ship[]; notifications Notification[]; auditLogs AuditLog[]
+ chainTransactions ChainTransaction[]; buildJobs BuildJob[]; expeditions Expedition[]; chatMessages ChatMessage[] @relation("chatAuthor")
+ referralsSent Referral[] @relation("referrer"); referralsReceived Referral[] @relation("referred"); seasonScores SeasonScore[]; marketOrders MarketOrder[]
+ spyReports SpyReport[] @relation("spySender"); spyReportsReceived SpyReport[] @relation("spyTarget"); alliances AllianceMember[]
+ achievements Achievement[]; dailyMissions UserDailyMission[]; diplomacyProposals Diplomacy[] @relation("diplomacyProposer"); diplomacyReceived Diplomacy[] @relation("diplomacyTarget"); events EventOccurrence[]
 }
-
 model Planet {
- id Int @id @default(autoincrement())
- userId Int
- user User @relation(fields:[userId],references:[id],onDelete:Cascade)
- name String
- galaxy Int @default(1)
- system Int @default(1)
- position Int @default(1)
- metal Float @default(1000)
- crystal Float @default(500)
- deuterium Float @default(100)
- energy Float @default(100)
- metalMine Int @default(1)
- crystalMine Int @default(1)
- deutSynth Int @default(1)
- powerPlant Int @default(1)
- hangarLevel Int @default(1)
- defenseLevel Int @default(1)
- researchLab Int @default(1)
- shipyard Int @default(1)
- lastTick DateTime @default(now())
- buildJobs BuildJob[]
- fleetsFrom Fleet[] @relation("fleetOrigin")
- fleetsTo Fleet[] @relation("fleetDestination")
- researches Research[]
- defenses Defense[]
- spyReports SpyReport[] @relation("spyTargetPlanet")
- @@unique([galaxy,system,position])
- @@index([userId])
+ id Int @id @default(autoincrement()); userId Int; user User @relation(fields:[userId],references:[id],onDelete:Cascade); name String
+ galaxy Int @default(1); system Int @default(1); position Int @default(1); metal Float @default(1000); crystal Float @default(500); deuterium Float @default(100); energy Float @default(100)
+ metalMine Int @default(1); crystalMine Int @default(1); deutSynth Int @default(1); powerPlant Int @default(1); hangarLevel Int @default(1); defenseLevel Int @default(1); researchLab Int @default(1); shipyard Int @default(1)
+ lastTick DateTime @default(now()); buildJobs BuildJob[]; fleetsFrom Fleet[] @relation("fleetOrigin"); fleetsTo Fleet[] @relation("fleetDestination"); researches Research[]; defenses Defense[]; spyReports SpyReport[] @relation("spyTargetPlanet")
+ @@unique([galaxy,system,position]); @@index([galaxy,system]); @@index([userId])
 }
 model Wallet { id Int @id @default(autoincrement()); userId Int @unique; user User @relation(fields:[userId],references:[id],onDelete:Cascade); tsx Float @default(1000); usdt Float @default(0); lockedTsx Float @default(0); lockedUsdt Float @default(0) }
 model Ledger { id Int @id @default(autoincrement()); userId Int; user User @relation(fields:[userId],references:[id],onDelete:Cascade); asset Asset; amount Float; type LedgerType; reference String?; createdAt DateTime @default(now()); @@index([userId,createdAt]) }
@@ -83,11 +39,18 @@ model Research { id Int @id @default(autoincrement()); userId Int; planetId Int;
 model Ship { id Int @id @default(autoincrement()); userId Int; type ShipType; quantity Int @default(0); user User @relation(fields:[userId],references:[id],onDelete:Cascade); @@unique([userId,type]) }
 model Defense { id Int @id @default(autoincrement()); planetId Int; type DefenseType; quantity Int @default(0); attack Int @default(10); defense Int @default(20); planet Planet @relation(fields:[planetId],references:[id],onDelete:Cascade); @@unique([planetId,type]) }
 model BuildJob { id Int @id @default(autoincrement()); userId Int; planetId Int; type JobType; target String; targetLevel Int; quantity Int @default(1); finishAt DateTime; status JobStatus @default(QUEUED); user User @relation(fields:[userId],references:[id],onDelete:Cascade); planet Planet @relation(fields:[planetId],references:[id],onDelete:Cascade); createdAt DateTime @default(now()); @@index([userId,status,finishAt]) }
-model Fleet { id Int @id @default(autoincrement()); userId Int; planetId Int; name String; ships Json; attack Int @default(10); defense Int @default(10); speed Int @default(100); status FleetStatus @default(IDLE); mission FleetMission @default(TRANSPORT); destinationPlanetId Int?; cargo Json?; departureAt DateTime?; arrivalAt DateTime?; user User @relation(fields:[userId],references:[id],onDelete:Cascade); origin Planet @relation("fleetOrigin",fields:[planetId],references:[id],onDelete:Cascade); destination Planet? @relation("fleetDestination",fields:[destinationPlanetId],references:[id],onDelete:SetNull); expeditions Expedition[]; createdAt DateTime @default(now()); @@index([userId,status]) }
-model Expedition { id Int @id @default(autoincrement()); userId Int; fleetId Int?; status String @default("RUNNING"); event String?; rewardTsx Float @default(0); rewardMetal Float @default(0); rewardCrystal Float @default(0); startedAt DateTime @default(now()); finishAt DateTime; user User @relation(fields:[userId],references:[id],onDelete:Cascade); fleet Fleet? @relation(fields:[fleetId],references:[id],onDelete:SetNull); @@index([userId,status,finishAt]) }
-model BattleReport { id Int @id @default(autoincrement()); attackerId Int; defenderId Int; winnerId Int; attackerPower Int; defenderPower Int; attackerLosses Json; defenderLosses Json; loot Json?; createdAt DateTime @default(now()); attacker User @relation("attacker",fields:[attackerId],references:[id],onDelete:Cascade); defender User @relation("defender",fields:[defenderId],references:[id],onDelete:Cascade) }
-model Alliance { id Int @id @default(autoincrement()); name String @unique; tag String @unique; createdAt DateTime @default(now()); members AllianceMember[] }
-model AllianceMember { userId Int @unique; allianceId Int; user User @relation(fields:[userId],references:[id],onDelete:Cascade); alliance Alliance @relation(fields:[allianceId],references:[id],onDelete:Cascade); joinedAt DateTime @default(now()) }
+model Fleet {
+ id Int @id @default(autoincrement()); userId Int; planetId Int; name String; ships Json; attack Int @default(10); defense Int @default(10); speed Int @default(100); status FleetStatus @default(IDLE); mission FleetMission @default(TRANSPORT)
+ destinationPlanetId Int?; cargo Json?; departureAt DateTime?; arrivalAt DateTime?; user User @relation(fields:[userId],references:[id],onDelete:Cascade); origin Planet @relation("fleetOrigin",fields:[planetId],references:[id],onDelete:Cascade)
+ destination Planet? @relation("fleetDestination",fields:[destinationPlanetId],references:[id],onDelete:SetNull); expeditions Expedition[]; createdAt DateTime @default(now()); @@index([userId,status])
+}
+model Expedition { id Int @id @default(autoincrement()); userId Int; fleetId Int?; status String @default("RUNNING"); event String?; rewardTsx Float @default(0); rewardMetal Float @default(0); rewardCrystal Float @default(0); startedAt DateTime @default(now()); finishAt DateTime
+ user User @relation(fields:[userId],references:[id],onDelete:Cascade); fleet Fleet? @relation(fields:[fleetId],references:[id],onDelete:SetNull); @@index([userId,status,finishAt]) }
+model BattleReport { id Int @id @default(autoincrement()); attackerId Int; defenderId Int; winnerId Int; rounds Int; attackerPower Int; defenderPower Int; attackerLosses Json; defenderLosses Json; loot Json?
+ attacker User @relation("attacker",fields:[attackerId],references:[id],onDelete:Cascade); defender User @relation("defender",fields:[defenderId],references:[id],onDelete:Cascade); createdAt DateTime @default(now()) }
+model Alliance { id Int @id @default(autoincrement()); name String @unique; tag String @unique; description String?; createdAt DateTime @default(now()); members AllianceMember[]; diplomacyFrom Diplomacy[] @relation("diplomacyFrom"); diplomacyTo Diplomacy[] @relation("diplomacyTo") }
+model AllianceMember { userId Int @unique; allianceId Int; rank String @default("MEMBER"); user User @relation(fields:[userId],references:[id],onDelete:Cascade); alliance Alliance @relation(fields:[allianceId],references:[id],onDelete:Cascade); joinedAt DateTime @default(now()) }
+model Diplomacy { id Int @id @default(autoincrement()); fromAllianceId Int; toAllianceId Int; status DiplomacyStatus @default(PROPOSED); kind String; fromAlliance Alliance @relation("diplomacyFrom",fields:[fromAllianceId],references:[id],onDelete:Cascade); toAlliance Alliance @relation("diplomacyTo",fields:[toAllianceId],references:[id],onDelete:Cascade); createdAt DateTime @default(now()); @@index([fromAllianceId,toAllianceId]) }
 model Notification { id Int @id @default(autoincrement()); userId Int; type NotificationType; title String; message String; read Boolean @default(false); createdAt DateTime @default(now()); user User @relation(fields:[userId],references:[id],onDelete:Cascade); @@index([userId,read,createdAt]) }
 model AuditLog { id Int @id @default(autoincrement()); userId Int?; action String; entity String; entityId String?; ip String?; metadata Json?; createdAt DateTime @default(now()); user User? @relation(fields:[userId],references:[id],onDelete:SetNull) }
 model ChainTransaction { id Int @id @default(autoincrement()); userId Int; provider BlockchainProvider; asset Asset; direction String; txHash String @unique; amount Float; status String @default("CONFIRMED"); createdAt DateTime @default(now()); user User @relation(fields:[userId],references:[id],onDelete:Cascade) }
@@ -97,3 +60,8 @@ model SeasonScore { id Int @id @default(autoincrement()); seasonId Int; userId I
 model Referral { id Int @id @default(autoincrement()); referrerId Int; referredId Int @unique; status String @default("PENDING"); rewardTsx Float @default(100); createdAt DateTime @default(now()); rewardedAt DateTime?; referrer User @relation("referrer",fields:[referrerId],references:[id],onDelete:Cascade); referred User @relation("referred",fields:[referredId],references:[id],onDelete:Cascade) }
 model SpyReport { id Int @id @default(autoincrement()); senderId Int; targetId Int; targetPlanetId Int; status EspionageStatus @default(RUNNING); intel Json; createdAt DateTime @default(now()); sender User @relation("spySender",fields:[senderId],references:[id],onDelete:Cascade); target User @relation("spyTarget",fields:[targetId],references:[id],onDelete:Cascade); targetPlanet Planet @relation("spyTargetPlanet",fields:[targetPlanetId],references:[id],onDelete:Cascade); @@index([senderId,createdAt]) }
 model ChatMessage { id Int @id @default(autoincrement()); userId Int; channel String @default("global"); message String; createdAt DateTime @default(now()); user User @relation("chatAuthor",fields:[userId],references:[id],onDelete:Cascade); @@index([channel,createdAt]) }
+model Achievement { id Int @id @default(autoincrement()); userId Int; code String; title String; description String; rewardXp Int; unlockedAt DateTime @default(now()); user User @relation(fields:[userId],references:[id],onDelete:Cascade); @@unique([userId,code]) }
+model DailyMission { id Int @id @default(autoincrement()); code String @unique; title String; description String; target Int @default(1); rewardTsx Float @default(50); rewardXp Int @default(100); active Boolean @default(true); userMissions UserDailyMission[] }
+model UserDailyMission { id Int @id @default(autoincrement()); userId Int; missionId Int; day DateTime; progress Int @default(0); completed Boolean @default(false); claimed Boolean @default(false); user User @relation(fields:[userId],references:[id],onDelete:Cascade); mission DailyMission @relation(fields:[missionId],references:[id],onDelete:Cascade); @@unique([userId,missionId,day]) }
+model GalaxyEvent { id Int @id @default(autoincrement()); code String; title String; description String; rewardTsx Float @default(0); rewardXp Int @default(0); startsAt DateTime; endsAt DateTime; active Boolean @default(true); occurrences EventOccurrence[] }
+model EventOccurrence { id Int @id @default(autoincrement()); eventId Int; userId Int; planetId Int; outcome String; rewardTsx Float @default(0); rewardXp Int @default(0); createdAt DateTime @default(now()); event GalaxyEvent @relation(fields:[eventId],references:[id],onDelete:Cascade); user User @relation(fields:[userId],references:[id],onDelete:Cascade) }
