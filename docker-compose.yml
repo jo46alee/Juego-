@@ -1,0 +1,13 @@
+services:
+  gamefi:
+    build: .
+    container_name: trendshopx-gamefi
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - gamefi_data:/app/data
+volumes:
+  gamefi_data:
