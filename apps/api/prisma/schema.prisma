@@ -31,7 +31,7 @@ model User {
   ships Ship[]
   notifications Notification[]
   auditLogs AuditLog[]
-  chainTransactions ChainTransaction[]
+  chainTransactions ChainTransaction[]\n  buildJobs BuildJob[]\n  expeditions Expedition[]\n  chatMessages ChatMessage[] @relation("chatAuthor")
 }
 
 model Planet {
@@ -50,7 +50,7 @@ model Planet {
   crystalMine Int @default(1)
   deutSynth Int @default(1)
   powerPlant Int @default(1)
-  lastTick DateTime @default(now())
+  lastTick DateTime @default(now())\n  buildJobs BuildJob[]\n  fleetsFrom Fleet[] @relation("fleetOrigin")\n  fleetsTo Fleet[] @relation("fleetDestination")
   fleets Fleet[]
   researches Research[]
   @@unique([galaxy,system,position])
@@ -132,7 +132,7 @@ model Ship {
   @@unique([userId,type])
 }
 
-model Fleet {
+model BuildJob {\n  id Int @id @default(autoincrement())\n  userId Int\n  planetId Int\n  type JobType\n  target String\n  targetLevel Int\n  finishAt DateTime\n  status String @default("QUEUED")\n  user User @relation(fields:[userId],references:[id],onDelete:Cascade)\n  planet Planet @relation(fields:[planetId],references:[id],onDelete:Cascade)\n  createdAt DateTime @default(now())\n  @@index([userId,status,finishAt])\n}\n\nmodel Fleet {
   id Int @id @default(autoincrement())
   userId Int
   planetId Int
@@ -142,7 +142,7 @@ model Fleet {
   defense Int @default(10)
   speed Int @default(100)
   status FleetStatus @default(IDLE)
-  destinationPlanetId Int?
+  destinationPlanetId Int?\n  mission FleetMission @default(TRANSPORT)\n  cargo Json?\n  origin Planet @relation("fleetOrigin",fields:[planetId],references:[id],onDelete:Cascade)\n  destination Planet? @relation("fleetDestination",fields:[destinationPlanetId],references:[id],onDelete:SetNull)
   departureAt DateTime?
   arrivalAt DateTime?
   createdAt DateTime @default(now())
@@ -228,3 +228,4 @@ model ChainTransaction {
   user User @relation(fields:[userId],references:[id],onDelete:Cascade)
   @@index([userId,createdAt])
 }
+\nmodel Expedition {\n  id Int @id @default(autoincrement())\n  userId Int\n  fleetId Int?\n  status String @default("RUNNING")\n  rewardTsx Float @default(0)\n  rewardMetal Float @default(0)\n  rewardCrystal Float @default(0)\n  startedAt DateTime @default(now())\n  finishAt DateTime\n  user User @relation(fields:[userId],references:[id],onDelete:Cascade)\n  fleet Fleet? @relation(fields:[fleetId],references:[id],onDelete:SetNull)\n  @@index([userId,status,finishAt])\n}\n\nmodel Season {\n  id Int @id @default(autoincrement())\n  name String\n  status SeasonStatus @default(UPCOMING)\n  startsAt DateTime\n  endsAt DateTime\n  createdAt DateTime @default(now())\n}\n\nmodel ChatMessage {\n  id Int @id @default(autoincrement())\n  userId Int\n  channel String @default("global")\n  message String\n  createdAt DateTime @default(now())\n  user User @relation("chatAuthor",fields:[userId],references:[id],onDelete:Cascade)\n  @@index([channel,createdAt])\n}\n

@@ -220,6 +220,41 @@ app.post("/web3/simulate/withdraw",auth,async(req,res)=>{
  const txHash="sim_"+Date.now()+"_"+Math.random().toString(36).slice(2);const out=await prisma.$transaction(async tx=>{await tx.wallet.update({where:{userId:u.id},data:{[field]:{decrement:amount}}});await tx.ledger.create({data:{userId:u.id,asset,amount:-amount,type:LedgerType.WITHDRAW,reference:txHash}});return tx.chainTransaction.create({data:{userId:u.id,provider:BlockchainProvider.SIMULATED_EVM,asset,direction:"WITHDRAW",txHash,amount}})});res.json({mode:"SIMULATED",transaction:out,message:"Simulación local; sustituye este adaptador por un proveedor RPC antes de usar fondos reales."});
 });
 
-wss.on("connection",ws=>ws.send(JSON.stringify({type:"connected",service:"gamefi",version:"2.0.0"})));
+
+// V3 progression engine: queued construction/research/ship jobs and expeditions.
+async function completeJobs(userId:number){
+ const now=new Date();
+ const jobs=await prisma.buildJob.findMany({where:{userId,status:"QUEUED",finishAt:{lte:now}},orderBy:{id:"asc"}});
+ for(const j of jobs){
+  if(j.type==="BUILDING"){const allowed=["metalMine","crystalMine","deutSynth","powerPlant"];if(allowed.includes(j.target)){const data:any={};data[j.target]={increment:1};await prisma.planet.update({where:{id:j.planetId},data});}}
+  if(j.type==="RESEARCH"){const r=await prisma.research.findFirst({where:{userId,planetId:j.planetId,type:j.target as ResearchType}});if(r)await prisma.research.update({where:{id:r.id},data:{level:j.targetLevel}});}
+  if(j.type==="SHIP"){const t=j.target as ShipType;const q=j.targetLevel;await prisma.ship.upsert({where:{userId_type:{userId,type:t}},update:{quantity:{increment:q}},create:{userId,type:t,quantity:q}});}
+  await prisma.buildJob.update({where:{id:j.id},data:{status:"DONE"}});
+  await notify(userId,NotificationType.SYSTEM,"Construcción completada",j.target+" terminó su cola.");
+ }
+}
+async function completeExpeditions(userId:number){
+ const now=new Date();const ex=await prisma.expedition.findMany({where:{userId,status:"RUNNING",finishAt:{lte:now}}});
+ for(const e of ex){const reward={tsx:Math.floor(25+Math.random()*125),metal:Math.floor(500+Math.random()*2500),crystal:Math.floor(200+Math.random()*1200)};const p=(await prisma.planet.findFirst({where:{userId}}));if(p)await prisma.planet.update({where:{id:p.id},data:{metal:{increment:reward.metal},crystal:{increment:reward.crystal}}});await prisma.wallet.update({where:{userId},data:{tsx:{increment:reward.tsx}}});await prisma.ledger.create({data:{userId,asset:Asset.TSX,amount:reward.tsx,type:LedgerType.REWARD,reference:"expedition:"+e.id}});await prisma.expedition.update({where:{id:e.id},data:{status:"COMPLETED",rewardTsx:reward.tsx,rewardMetal:reward.metal,rewardCrystal:reward.crystal}});await notify(userId,NotificationType.MISSION,"Expedición completada",`Ganaste ${reward.tsx} TSX y recursos.`);}
+}
+app.get("/v3/status",auth,async(req,res)=>{const u=(req as any).user as Token;await completeJobs(u.id);await completeExpeditions(u.id);res.json({version:"3.0.0",features:["queues","expeditions","chat","seasons","combat","anti-cheat"]});});
+app.get("/jobs",auth,async(req,res)=>{const u=(req as any).user as Token;await completeJobs(u.id);res.json(await prisma.buildJob.findMany({where:{userId:u.id},orderBy:{id:"desc"},take:50}));});
+app.post("/jobs/building",auth,idem,async(req,res)=>{
+ const u=(req as any).user as Token,planetId=Number(req.body.planetId),type=String(req.body.type||""),minutes=Math.max(1,Math.min(1440,Math.floor(Number(req.body.minutes)||5)));
+ if(!["metalMine","crystalMine","deutSynth","powerPlant"].includes(type))return res.status(400).json({error:"Edificio inválido"});
+ const p=await prisma.planet.findFirst({where:{id:planetId,userId:u.id}});if(!p)return res.status(404).json({error:"Planeta no encontrado"});await tickPlanet(p.id);const f=await prisma.planet.findUnique({where:{id:p.id}}) as any;const c=cost(f[type],type);if(f.metal<c.metal||f.crystal<c.crystal||f.deuterium<c.deuterium)return res.status(400).json({error:"Recursos insuficientes",cost:c});
+ const job=await prisma.$transaction(async tx=>{await tx.planet.update({where:{id:p.id},data:{metal:{decrement:c.metal},crystal:{decrement:c.crystal},deuterium:{decrement:c.deuterium}}});return tx.buildJob.create({data:{userId:u.id,planetId,type:type as any,target:type,targetLevel:f[type]+1,finishAt:new Date(Date.now()+minutes*60000)}})});res.json(job);
+});
+app.get("/expeditions",auth,async(req,res)=>{const u=(req as any).user as Token;await completeExpeditions(u.id);res.json(await prisma.expedition.findMany({where:{userId:u.id},orderBy:{id:"desc"},take:30}}));
+app.post("/expeditions/start",auth,async(req,res)=>{
+ const u=(req as any).user as Token;const minutes=Math.max(2,Math.min(180,Math.floor(Number(req.body.minutes)||10)));const f=await prisma.fleet.findFirst({where:{userId:u.id,status:FleetStatus.IDLE}});if(!f)return res.status(400).json({error:"Necesitas una flota IDLE"});
+ await prisma.fleet.update({where:{id:f.id},data:{status:FleetStatus.TRAVELING,mission:"EXPEDITION"}});
+ const e=await prisma.expedition.create({data:{userId:u.id,fleetId:f.id,finishAt:new Date(Date.now()+minutes*60000)}});res.json(e);
+});
+app.get("/chat/:channel",async(req,res)=>{const channel=String(req.params.channel).slice(0,30);res.json(await prisma.chatMessage.findMany({where:{channel},orderBy:{id:"desc"},take:100,include:{user:{select:{username:true}}}}));});
+app.post("/chat/:channel",auth,async(req,res)=>{const u=(req as any).user as Token;const channel=String(req.params.channel).slice(0,30),message=String(req.body.message||"").trim();if(!message||message.length>500)return res.status(400).json({error:"Mensaje inválido"});const m=await prisma.chatMessage.create({data:{userId:u.id,channel,message},include:{user:{select:{username:true}}}});wss.clients.forEach(c=>{if(c.readyState===1)c.send(JSON.stringify({type:"chat",data:m}))});res.json(m);});
+app.get("/seasons",async(_,res)=>{res.json(await prisma.season.findMany({orderBy:{startsAt:"desc"}}));});
+app.post("/admin/seasons",auth,async(req,res)=>{const u=(req as any).user as Token;if(![Role.ADMIN,Role.SUPER_ADMIN].includes(u.role))return res.status(403).json({error:"Solo admin"});const name=String(req.body.name||"Temporada"),starts=new Date(req.body.startsAt),ends=new Date(req.body.endsAt);if(isNaN(starts.getTime())||isNaN(ends.getTime())||ends<=starts)return res.status(400).json({error:"Fechas inválidas"});res.json(await prisma.season.create({data:{name,startsAt:starts,endsAt:ends}}));});
+\nwss.on("connection",ws=>ws.send(JSON.stringify({type:"connected",service:"gamefi",version:"3.0.0"})));
 process.on("SIGINT",async()=>{await prisma.$disconnect();process.exit(0)});
 http.listen(PORT,()=>console.log("TrendShopX GameFi API v2 listening on "+PORT));
